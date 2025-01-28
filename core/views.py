@@ -21,7 +21,7 @@ from django.contrib.auth.models import User
 from rest_framework.permissions import IsAdminUser
 from django.contrib.auth.password_validation import validate_password
 from rest_framework.exceptions import ValidationError
-
+import re
 
 
 class ProjectViewSet(viewsets.ModelViewSet):
@@ -76,3 +76,53 @@ class AllUsersView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return self.queryset
+
+    def validate_password(self, password):
+        if len(password) < 6:
+            return "Password must be at least 6 characters long."
+        if not re.search(r"[A-Z]", password):
+            return "Password must contain at least one uppercase letter."
+        if not re.search(r"[a-z]", password):
+            return "Password must contain at least one lowercase letter."
+        if not re.search(r"[0-9]", password):
+            return "Password must contain at least one number."
+        if not re.search(r"[!@#$%^&*(),.?\":{}|<>]", password):
+            return "Password must contain at least one special character."
+        return None
+    
+    def create(self, request, *args, **kwargs):
+        
+        username = request.data.get('username')
+        password = request.data.get('password')
+
+        # Validate mandatory fields
+        if not username:
+            return Response({"error": "Username is required."}, status=status.HTTP_400_BAD_REQUEST)
+        if not password:
+            return Response({"error": "Password is required."}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Validate password
+        password_error = self.validate_password(password)
+        if password_error:
+            return Response({"error": password_error}, status=status.HTTP_400_BAD_REQUEST)
+
+        # Create the user
+        serializer = self.get_serializer(data=request.data)
+        if serializer.is_valid():
+            user = serializer.save()
+            # Hash the password
+            user.set_password(password)
+            user.save()
+
+            # Response with created user details
+            return Response(
+                {
+                    "id": user.id,
+                    "username": user.username,
+                    "email": user.email,
+                    "is_staff": user.is_staff,
+                    "is_superuser": user.is_superuser,
+                },
+                status=status.HTTP_201_CREATED,
+            )
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
