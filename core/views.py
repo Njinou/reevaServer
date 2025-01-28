@@ -1,7 +1,7 @@
 from django.shortcuts import render
 
 # Create your views here.
-from rest_framework import viewsets
+from rest_framework import viewsets, status
 from rest_framework.permissions import IsAuthenticated
 from .models import Project, Task
 from .serializers import ProjectSerializer, TaskSerializer, UserSerializer
@@ -13,7 +13,16 @@ from django.utils.timezone import now
 
 from django.contrib.auth.models import User
 from .models import Project, Task
+
+
+from rest_framework.views import APIView
 from rest_framework import status
+from django.contrib.auth.models import User
+from rest_framework.permissions import IsAdminUser
+from django.contrib.auth.password_validation import validate_password
+from rest_framework.exceptions import ValidationError
+
+
 
 class ProjectViewSet(viewsets.ModelViewSet):
     queryset = Project.objects.all()
@@ -67,30 +76,3 @@ class AllUsersView(viewsets.ModelViewSet):
 
     def get_queryset(self):
         return self.queryset
-
-
-class UsersByProjectView(viewsets.ModelViewSet):
-   
-    permission_classes = [IsAuthenticated]
-
-    def get(self, request, project_id):
-        try:
-            project = Project.objects.get(id=project_id)
-
-            if project.owner != request.user and not request.user.is_superuser:
-                return Response(
-                    {"error": "You do not have permission to view this project's users."},
-                    status=status.HTTP_403_FORBIDDEN
-                )
-
-            # Get all users assigned to tasks within the project
-            tasks = Task.objects.filter(project=project)
-            assigned_user_ids = tasks.values_list('assignee', flat=True)
-            users = User.objects.filter(id__in=assigned_user_ids).distinct()
-            
-            serializer = UserSerializer(users, many=True)
-            return Response(serializer.data, status=status.HTTP_200_OK)
-        
-        except Project.DoesNotExist:
-            return Response({"error": "Project not found"}, status=status.HTTP_404_NOT_FOUND)
-        
